@@ -180,8 +180,6 @@
     renderer.setPixelRatio(1);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.90;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     wrap.appendChild(renderer.domElement);
 
     function fitCanvas() {
@@ -202,9 +200,9 @@
     const darkBg = new THREE.Color(0x030407);
     const dayBg = new THREE.Color(0xcbd5e1);
     scene.background = darkBg.clone();
-    scene.fog = new THREE.FogExp2(0x04060b, 0.035);
+    scene.fog = new THREE.FogExp2(0x04060b, 0.012);
 
-    const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 0.1, 260);
     camera.position.set(0, 0.4, 19);
 
     const composer = new EffectComposer(renderer);
@@ -212,7 +210,6 @@
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(WIDTH, HEIGHT), 1.25, 0.5, 0.85);
     composer.addPass(bloomPass);
 
-    // Chiseled stone texture with rough chisel marks, pits, and relief
     function createChiseledStoneTexture() {
       const c = document.createElement('canvas');
       c.width = 512;
@@ -221,7 +218,6 @@
       ctx.fillStyle = '#5e646e';
       ctx.fillRect(0, 0, 512, 512);
 
-      // Coarse mineral grain & chisel pockmarks
       for (let i = 0; i < 26000; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
@@ -231,7 +227,6 @@
         ctx.fillRect(x, y, r, r);
       }
 
-      // Angled chisel gouge marks across the stone face
       for (let i = 0; i < 240; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
@@ -245,7 +240,6 @@
         ctx.stroke();
       }
 
-      // Deeper cleft lines
       for (let i = 0; i < 22; i++) {
         ctx.strokeStyle = 'rgba(15, 17, 22, 0.6)';
         ctx.lineWidth = Math.random() * 1.6 + 0.6;
@@ -311,45 +305,54 @@
     keyLight.position.set(5, 6, 12);
     scene.add(keyLight);
 
-    const sunLight = new THREE.PointLight(0xffb703, 0, 60, 1.35);
+    // Keep point light radius & falloff gentle so the floor does not get a glossy water-like sheen
+    const sunLight = new THREE.PointLight(0xffb703, 0, 26, 2.0);
     scene.add(sunLight);
 
-    // 3D floor plane (no letter shadows cast onto it; still keeps 3D depth & rubble landing)
-    const floorMat = new THREE.MeshStandardMaterial({
+    // Matte 3D floor extending deep into fog for a clean horizon line
+    const floorMat = new THREE.MeshLambertMaterial({
       color: 0x0b0e14,
-      map: stoneTex,
-      bumpMap: stoneTex,
-      bumpScale: 0.025,
-      roughness: 0.9,
-      metalness: 0.05,
     });
-    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(46, 1.2, 34), floorMat);
-    floorMesh.position.set(0, -4.8, -4);
+    const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(180, 160), floorMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.set(0, -4.2, -35);
     scene.add(floorMesh);
 
-    // Optional custom backdrop plane behind the scene so 3D floor remains intact
+    // Backdrop plane behind the scene; loads ./backdrop.jpg automatically if present in repo
     const backdropMat = new THREE.MeshBasicMaterial({
       map: null,
       transparent: true,
       opacity: 0.0,
       depthWrite: false,
+      fog: false,
     });
-    const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(54, 28), backdropMat);
-    backdropPlane.position.set(0, 2.5, -16);
+    const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(96, 48), backdropMat);
+    backdropPlane.position.set(0, 6.0, -45);
     backdropPlane.visible = false;
     scene.add(backdropPlane);
+
+    function applyBackdropTexture(tex) {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      if (backdropMat.map) backdropMat.map.dispose();
+      backdropMat.map = tex;
+      backdropMat.needsUpdate = true;
+      backdropPlane.visible = true;
+    }
+
+    const texLoader = new THREE.TextureLoader();
+    texLoader.load(
+      './backdrop.jpg',
+      (tex) => applyBackdropTexture(tex),
+      undefined,
+      () => {} // Ignore if backdrop.jpg is not yet uploaded
+    );
 
     backdropInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       const url = URL.createObjectURL(file);
-      const texLoader = new THREE.TextureLoader();
       texLoader.load(url, (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        if (backdropMat.map) backdropMat.map.dispose();
-        backdropMat.map = tex;
-        backdropMat.needsUpdate = true;
-        backdropPlane.visible = true;
+        applyBackdropTexture(tex);
         URL.revokeObjectURL(url);
         statusEl.style.display = 'block';
         statusEl.textContent = `Loaded backdrop: ${file.name}`;
@@ -513,9 +516,6 @@
 
         const isSun = idx === sunIdx;
         const mesh = new THREE.Mesh(geo, isSun ? sunMat : stoneMat);
-        // castShadow intentionally false so no letter shadow appears on the ground
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
         built.push({ idx, ch, width: w, mesh, isSun, isShatter: idx === shatterIdx });
         totalWidth += w + letterSpacing;
       });
@@ -581,15 +581,15 @@
       }
       scene.background.copy(darkBg);
       scene.fog.color.setHex(0x04060b);
-      scene.fog.density = 0.035;
+      scene.fog.density = 0.012;
       ambientLight.intensity = 0.35;
       keyLight.intensity = 0.35;
       bloomPass.strength = 1.25;
       lastTime = performance.now();
     }
 
-    const loader = new FontLoader();
-    loader.load(
+    const fontLoader = new FontLoader();
+    fontLoader.load(
       'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/helvetiker_bold.typeface.json',
       (font) => {
         loadedFont = font;
@@ -672,7 +672,7 @@
       const bloomEase = THREE.MathUtils.lerp(1.45, 0.80, smoothstep(12.5, 15.0, t));
 
       sunMat.emissiveIntensity = sunIgnite * 3.6;
-      sunLight.intensity = sunRampUp * 48 * endFade;
+      sunLight.intensity = sunRampUp * 36 * endFade;
       sunCore.material.opacity = smoothstep(5.5, 8.2, t) * 0.9;
       sunCore.scale.setScalar(0.8 + sunRampUp * 0.45);
       bloomPass.strength = bloomEase;
@@ -688,13 +688,13 @@
       const daylight = smoothstep(8.5, 14.2, t);
       scene.background.copy(darkBg).lerp(dayBg, daylight);
       scene.fog.color.copy(darkBg).lerp(new THREE.Color(0xcbd5e1), daylight);
-      scene.fog.density = THREE.MathUtils.lerp(0.035, 0.008, daylight);
+      scene.fog.density = THREE.MathUtils.lerp(0.012, 0.011, daylight);
       ambientLight.intensity = THREE.MathUtils.lerp(0.35, 1.85, daylight);
       keyLight.intensity = THREE.MathUtils.lerp(1.35, 2.5, daylight);
-      floorMat.color.setHex(0x0b0e14).lerp(new THREE.Color(0x64748b), daylight);
+      floorMat.color.setHex(0x11151c).lerp(new THREE.Color(0x525c6a), daylight);
 
       if (backdropMat.map) {
-        backdropMat.opacity = smoothstep(6.0, 12.5, t) * 0.45;
+        backdropMat.opacity = smoothstep(6.0, 12.5, t) * 0.55;
       }
     }
 
