@@ -56,7 +56,7 @@
       font-size: 13px;
     }
     input[type="text"] {
-      width: 190px;
+      width: 180px;
       font-weight: 600;
     }
     input[type="file"] {
@@ -145,6 +145,12 @@
     <label class="file-btn" for="backdropInput">Backdrop Image
       <input id="backdropInput" type="file" accept="image/*" />
     </label>
+    <label class="mini">Fit:
+      <select id="backdropFitSelect">
+        <option value="cover" selected>Cover</option>
+        <option value="fit">Fit Full</option>
+      </select>
+    </label>
     <button id="applyBtn">Generate</button>
     <button id="pauseBtn">Pause</button>
     <span id="timer">00.0s / 15.0s</span>
@@ -171,6 +177,7 @@
     const shatterSelect = document.getElementById('shatterSelect');
     const sunSelect = document.getElementById('sunSelect');
     const backdropInput = document.getElementById('backdropInput');
+    const backdropFitSelect = document.getElementById('backdropFitSelect');
     const applyBtn = document.getElementById('applyBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const recordBtn = document.getElementById('recordBtn');
@@ -305,11 +312,10 @@
     keyLight.position.set(5, 6, 12);
     scene.add(keyLight);
 
-    // Keep point light radius & falloff gentle so the floor does not get a glossy water-like sheen
     const sunLight = new THREE.PointLight(0xffb703, 0, 26, 2.0);
     scene.add(sunLight);
 
-    // Matte 3D floor extending deep into fog for a clean horizon line
+    // Matte 3D floor extending deep into fog for a clean horizon line (no letter shadows)
     const floorMat = new THREE.MeshLambertMaterial({
       color: 0x0b0e14,
     });
@@ -318,7 +324,7 @@
     floorMesh.position.set(0, -4.2, -35);
     scene.add(floorMesh);
 
-    // Backdrop plane behind the scene; loads ./backdrop.jpg automatically if present in repo
+    // Backdrop plane sized dynamically to camera frustum and image aspect ratio
     const backdropMat = new THREE.MeshBasicMaterial({
       map: null,
       transparent: true,
@@ -326,16 +332,51 @@
       depthWrite: false,
       fog: false,
     });
-    const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(96, 48), backdropMat);
-    backdropPlane.position.set(0, 6.0, -45);
+    const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backdropMat);
+    backdropPlane.position.set(0, 1.5, -45);
     backdropPlane.visible = false;
     scene.add(backdropPlane);
+
+    function resizeBackdropToImage(tex) {
+      if (!tex || !tex.image) return;
+      const imgW = tex.image.naturalWidth || tex.image.width || 16;
+      const imgH = tex.image.naturalHeight || tex.image.height || 9;
+      const imgAspect = imgW / imgH;
+
+      const dist = Math.abs(camera.position.z - backdropPlane.position.z);
+      const vFovRad = THREE.MathUtils.degToRad(camera.fov);
+      const viewHeight = 2 * Math.tan(vFovRad / 2) * dist;
+      const viewWidth = viewHeight * camera.aspect;
+      const viewAspect = viewWidth / viewHeight;
+
+      const mode = backdropFitSelect.value;
+      const overscan = mode === 'cover' ? 1.12 : 1.0;
+      let planeW = viewWidth * overscan;
+      let planeH = viewHeight * overscan;
+
+      if (mode === 'cover') {
+        if (imgAspect > viewAspect) {
+          planeW = planeH * imgAspect;
+        } else {
+          planeH = planeW / imgAspect;
+        }
+      } else {
+        if (imgAspect > viewAspect) {
+          planeH = planeW / imgAspect;
+        } else {
+          planeW = planeH * imgAspect;
+        }
+      }
+
+      backdropPlane.scale.set(planeW, planeH, 1);
+    }
 
     function applyBackdropTexture(tex) {
       tex.colorSpace = THREE.SRGBColorSpace;
       if (backdropMat.map) backdropMat.map.dispose();
       backdropMat.map = tex;
       backdropMat.needsUpdate = true;
+      resizeBackdropToImage(tex);
       backdropPlane.visible = true;
     }
 
@@ -344,7 +385,7 @@
       './backdrop.jpg',
       (tex) => applyBackdropTexture(tex),
       undefined,
-      () => {} // Ignore if backdrop.jpg is not yet uploaded
+      () => {}
     );
 
     backdropInput.addEventListener('change', (e) => {
@@ -358,6 +399,12 @@
         statusEl.textContent = `Loaded backdrop: ${file.name}`;
         setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
       });
+    });
+
+    backdropFitSelect.addEventListener('change', () => {
+      if (backdropMat.map) {
+        resizeBackdropToImage(backdropMat.map);
+      }
     });
 
     const raysGroup = new THREE.Group();
@@ -694,7 +741,9 @@
       floorMat.color.setHex(0x11151c).lerp(new THREE.Color(0x525c6a), daylight);
 
       if (backdropMat.map) {
-        backdropMat.opacity = smoothstep(6.0, 12.5, t) * 0.55;
+        backdropPlane.position.x = camera.position.x * 0.65;
+        backdropPlane.position.y = 1.2 + (camera.position.y - 0.25) * 0.5;
+        backdropPlane.opacity = smoothstep(4.5, 11.5, t) * 0.75;
       }
     }
 
