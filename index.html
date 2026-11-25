@@ -45,6 +45,7 @@
       padding: 10px 14px;
       border-radius: 12px;
       z-index: 10;
+      transition: opacity 0.2s;
     }
     input[type="text"], select {
       background: #0b0f17;
@@ -55,16 +56,29 @@
       font-size: 13px;
     }
     input[type="text"] {
-      width: 210px;
+      width: 190px;
       font-weight: 600;
     }
-    label.mini {
+    input[type="file"] {
+      display: none;
+    }
+    label.mini, label.file-btn {
       font-size: 11px;
-      color: #94a3b8;
+      color: #cbd5e1;
       display: flex;
       align-items: center;
       gap: 4px;
     }
+    label.file-btn {
+      background: #162032;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    label.file-btn:hover { background: #22314d; }
     button {
       background: #1e293b;
       color: #f8fafc;
@@ -128,6 +142,9 @@
     <label class="mini">Sun:
       <select id="sunSelect"></select>
     </label>
+    <label class="file-btn" for="backdropInput">Backdrop Image
+      <input id="backdropInput" type="file" accept="image/*" />
+    </label>
     <button id="applyBtn">Generate</button>
     <button id="pauseBtn">Pause</button>
     <span id="timer">00.0s / 15.0s</span>
@@ -147,16 +164,17 @@
     const HEIGHT = 1080;
 
     const wrap = document.getElementById('canvas-wrap');
+    const hudEl = document.getElementById('hud');
     const timerEl = document.getElementById('timer');
     const statusEl = document.getElementById('status');
     const phraseInput = document.getElementById('phraseInput');
     const shatterSelect = document.getElementById('shatterSelect');
     const sunSelect = document.getElementById('sunSelect');
+    const backdropInput = document.getElementById('backdropInput');
     const applyBtn = document.getElementById('applyBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const recordBtn = document.getElementById('recordBtn');
 
-    // FIX 2: ACES Filmic tone mapping with ~0.90 exposure to roll off bright highlights
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(WIDTH, HEIGHT, false);
     renderer.setPixelRatio(1);
@@ -184,53 +202,71 @@
     const darkBg = new THREE.Color(0x030407);
     const dayBg = new THREE.Color(0xcbd5e1);
     scene.background = darkBg.clone();
-    scene.fog = new THREE.FogExp2(0x04060b, 0.055);
+    scene.fog = new THREE.FogExp2(0x04060b, 0.035);
 
     const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 0.1, 200);
     camera.position.set(0, 0.4, 19);
 
-    // FIX 2: Higher bloom threshold (0.85) so only the sun core blooms rather than the whole sky
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(WIDTH, HEIGHT), 1.25, 0.5, 0.85);
     composer.addPass(bloomPass);
 
-    function createStoneTexture() {
+    // Chiseled stone texture with rough chisel marks, pits, and relief
+    function createChiseledStoneTexture() {
       const c = document.createElement('canvas');
       c.width = 512;
       c.height = 512;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#686e78';
+      ctx.fillStyle = '#5e646e';
       ctx.fillRect(0, 0, 512, 512);
-      for (let i = 0; i < 18000; i++) {
+
+      // Coarse mineral grain & chisel pockmarks
+      for (let i = 0; i < 26000; i++) {
         const x = Math.random() * 512;
         const y = Math.random() * 512;
-        const r = Math.random() * 2.5 + 0.5;
-        const v = Math.floor(70 + Math.random() * 95);
-        ctx.fillStyle = `rgb(${v},${v},${v + 4})`;
+        const r = Math.random() * 3.0 + 0.4;
+        const v = Math.floor(48 + Math.random() * 115);
+        ctx.fillStyle = `rgb(${v},${v},${v + 3})`;
         ctx.fillRect(x, y, r, r);
       }
-      ctx.strokeStyle = 'rgba(20, 22, 28, 0.45)';
-      for (let i = 0; i < 28; i++) {
-        ctx.lineWidth = Math.random() * 1.4 + 0.4;
+
+      // Angled chisel gouge marks across the stone face
+      for (let i = 0; i < 240; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const len = 8 + Math.random() * 22;
+        const ang = -0.65 + (Math.random() - 0.5) * 0.35;
+        ctx.strokeStyle = Math.random() > 0.5 ? 'rgba(22, 24, 29, 0.42)' : 'rgba(175, 182, 194, 0.22)';
+        ctx.lineWidth = Math.random() * 1.5 + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+        ctx.stroke();
+      }
+
+      // Deeper cleft lines
+      for (let i = 0; i < 22; i++) {
+        ctx.strokeStyle = 'rgba(15, 17, 22, 0.6)';
+        ctx.lineWidth = Math.random() * 1.6 + 0.6;
         ctx.beginPath();
         let x = Math.random() * 512;
         let y = Math.random() * 512;
         ctx.moveTo(x, y);
         for (let s = 0; s < 5; s++) {
-          x += (Math.random() - 0.5) * 70;
-          y += (Math.random() - 0.5) * 70;
+          x += (Math.random() - 0.5) * 65;
+          y += (Math.random() - 0.5) * 65;
           ctx.lineTo(x, y);
         }
         ctx.stroke();
       }
+
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(0.35, 0.35);
+      tex.repeat.set(0.45, 0.45);
       return tex;
     }
 
-    // FIX 1: Soft radial/axial gradient alpha texture to eliminate hard ray cone edges
     function createSoftRayTexture() {
       const c = document.createElement('canvas');
       c.width = 256;
@@ -243,18 +279,17 @@
       grad.addColorStop(1.0, 'rgba(255, 209, 102, 0.0)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 256, 256);
-      const tex = new THREE.CanvasTexture(c);
-      return tex;
+      return new THREE.CanvasTexture(c);
     }
 
-    const stoneTex = createStoneTexture();
+    const stoneTex = createChiseledStoneTexture();
     const stoneMat = new THREE.MeshStandardMaterial({
-      color: 0x8a929e,
+      color: 0x7b838f,
       map: stoneTex,
       bumpMap: stoneTex,
-      bumpScale: 0.045,
-      roughness: 0.78,
-      metalness: 0.12,
+      bumpScale: 0.09,
+      roughness: 0.88,
+      metalness: 0.06,
     });
 
     const sunMat = new THREE.MeshStandardMaterial({
@@ -274,28 +309,54 @@
 
     const keyLight = new THREE.DirectionalLight(0xfff1d6, 0.35);
     keyLight.position.set(5, 6, 12);
-    keyLight.castShadow = true;
     scene.add(keyLight);
 
     const sunLight = new THREE.PointLight(0xffb703, 0, 60, 1.35);
     scene.add(sunLight);
 
-    const monoMat = new THREE.MeshStandardMaterial({ color: 0x0b0e14, roughness: 0.95 });
-    const monoSpecs = [
-      [-11, -1.5, -9, 3.2, 12, 2.5],
-      [-6.5, -2.2, -13, 4.0, 14, 3.0],
-      [6.8, -1.8, -11, 3.6, 13, 2.8],
-      [11.5, -1.2, -8, 3.0, 11, 2.4],
-      [0, -4.8, -4, 34, 1.2, 26],
-    ];
-    monoSpecs.forEach(([x, y, z, w, h, d]) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), monoMat);
-      m.position.set(x, y, z);
-      m.receiveShadow = true;
-      scene.add(m);
+    // 3D floor plane (no letter shadows cast onto it; still keeps 3D depth & rubble landing)
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x0b0e14,
+      map: stoneTex,
+      bumpMap: stoneTex,
+      bumpScale: 0.025,
+      roughness: 0.9,
+      metalness: 0.05,
+    });
+    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(46, 1.2, 34), floorMat);
+    floorMesh.position.set(0, -4.8, -4);
+    scene.add(floorMesh);
+
+    // Optional custom backdrop plane behind the scene so 3D floor remains intact
+    const backdropMat = new THREE.MeshBasicMaterial({
+      map: null,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false,
+    });
+    const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(54, 28), backdropMat);
+    backdropPlane.position.set(0, 2.5, -16);
+    backdropPlane.visible = false;
+    scene.add(backdropPlane);
+
+    backdropInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const texLoader = new THREE.TextureLoader();
+      texLoader.load(url, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        if (backdropMat.map) backdropMat.map.dispose();
+        backdropMat.map = tex;
+        backdropMat.needsUpdate = true;
+        backdropPlane.visible = true;
+        URL.revokeObjectURL(url);
+        statusEl.style.display = 'block';
+        statusEl.textContent = `Loaded backdrop: ${file.name}`;
+        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+      });
     });
 
-    // FIX 1: Soft alpha-feathered god-ray cones with tighter spread & subtle breathing
     const raysGroup = new THREE.Group();
     raysGroup.visible = false;
     scene.add(raysGroup);
@@ -420,7 +481,7 @@
 
       const lenFactor = clean.length > 14 ? Math.max(0.58, 14 / clean.length) : 1.0;
       const size = 1.28 * lenFactor;
-      const height = 0.46 * lenFactor;
+      const height = 0.52 * lenFactor;
       const letterSpacing = 0.14 * lenFactor;
 
       const chars = [...clean];
@@ -440,9 +501,9 @@
           height,
           curveSegments: 10,
           bevelEnabled: true,
-          bevelThickness: 0.045 * lenFactor,
-          bevelSize: 0.032 * lenFactor,
-          bevelSegments: 3,
+          bevelThickness: 0.065 * lenFactor,
+          bevelSize: 0.045 * lenFactor,
+          bevelSegments: 2,
         });
         geo.computeBoundingBox();
         const bb = geo.boundingBox;
@@ -452,8 +513,9 @@
 
         const isSun = idx === sunIdx;
         const mesh = new THREE.Mesh(geo, isSun ? sunMat : stoneMat);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        // castShadow intentionally false so no letter shadow appears on the ground
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
         built.push({ idx, ch, width: w, mesh, isSun, isShatter: idx === shatterIdx });
         totalWidth += w + letterSpacing;
       });
@@ -514,9 +576,12 @@
       sunCore.material.opacity = 0;
       raysGroup.visible = false;
       rayMat.opacity = 0;
+      if (backdropMat.map) {
+        backdropMat.opacity = 0.0;
+      }
       scene.background.copy(darkBg);
       scene.fog.color.setHex(0x04060b);
-      scene.fog.density = 0.055;
+      scene.fog.density = 0.035;
       ambientLight.intensity = 0.35;
       keyLight.intensity = 0.35;
       bloomPass.strength = 1.25;
@@ -601,7 +666,6 @@
         });
       }
 
-      // FIX 2: Ease sunLight & bloom down in final ~2 seconds (13.0s -> 15.0s) so highlights stay controlled
       const sunIgnite = smoothstep(5.3, 9.8, t);
       const sunRampUp = smoothstep(5.3, 12.2, t);
       const endFade = 1.0 - 0.28 * smoothstep(12.8, 15.0, t);
@@ -613,7 +677,6 @@
       sunCore.scale.setScalar(0.8 + sunRampUp * 0.45);
       bloomPass.strength = bloomEase;
 
-      // FIX 1: Soft ray opacity in ~0.16-0.22 range with gentle rotation & breathing
       if (t >= 5.4) {
         raysGroup.visible = true;
         raysGroup.rotation.z += dt * 0.09;
@@ -625,10 +688,14 @@
       const daylight = smoothstep(8.5, 14.2, t);
       scene.background.copy(darkBg).lerp(dayBg, daylight);
       scene.fog.color.copy(darkBg).lerp(new THREE.Color(0xcbd5e1), daylight);
-      scene.fog.density = THREE.MathUtils.lerp(0.055, 0.008, daylight);
+      scene.fog.density = THREE.MathUtils.lerp(0.035, 0.008, daylight);
       ambientLight.intensity = THREE.MathUtils.lerp(0.35, 1.85, daylight);
       keyLight.intensity = THREE.MathUtils.lerp(1.35, 2.5, daylight);
-      monoMat.color.setHex(0x0b0e14).lerp(new THREE.Color(0x64748b), daylight);
+      floorMat.color.setHex(0x0b0e14).lerp(new THREE.Color(0x64748b), daylight);
+
+      if (backdropMat.map) {
+        backdropMat.opacity = smoothstep(6.0, 12.5, t) * 0.45;
+      }
     }
 
     function animate(now) {
@@ -661,6 +728,7 @@
 
       recordBtn.disabled = true;
       applyBtn.disabled = true;
+      hudEl.style.opacity = '0';
       paused = false;
       pauseBtn.textContent = 'Pause';
       buildTextMeshes(phraseInput.value, true);
@@ -697,6 +765,7 @@
         a.click();
         URL.revokeObjectURL(url);
 
+        hudEl.style.opacity = '1';
         recordBtn.disabled = false;
         applyBtn.disabled = false;
         statusEl.textContent = `Downloaded ${slug}-15s.${ext}`;
