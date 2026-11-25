@@ -60,7 +60,7 @@
       font-size: 13px;
     }
     input[type="text"] {
-      width: 175px;
+      width: 165px;
       font-weight: 600;
     }
     input[type="file"] {
@@ -155,6 +155,14 @@
         <option value="fit">Fit Full</option>
       </select>
     </label>
+    <label class="mini">Floor:
+      <select id="floorAlphaSelect">
+        <option value="1">Solid</option>
+        <option value="0.5" selected>50%</option>
+        <option value="0.25">25%</option>
+        <option value="0">Off</option>
+      </select>
+    </label>
     <button id="clearBackdropBtn" title="Remove custom backdrop">Clear BG</button>
     <button id="applyBtn">Generate</button>
     <button id="pauseBtn">Pause</button>
@@ -183,6 +191,7 @@
     const sunSelect = document.getElementById('sunSelect');
     const backdropInput = document.getElementById('backdropInput');
     const backdropFitSelect = document.getElementById('backdropFitSelect');
+    const floorAlphaSelect = document.getElementById('floorAlphaSelect');
     const clearBackdropBtn = document.getElementById('clearBackdropBtn');
     const applyBtn = document.getElementById('applyBtn');
     const pauseBtn = document.getElementById('pauseBtn');
@@ -321,14 +330,29 @@
     const sunLight = new THREE.PointLight(0xffb703, 0, 26, 2.0);
     scene.add(sunLight);
 
-    // Matte 3D floor extending deep into fog for a clean horizon line (no letter shadows)
+    // Semi-transparent matte 3D floor so backdrops show through while rubble still lands cleanly
     const floorMat = new THREE.MeshLambertMaterial({
       color: 0x0b0e14,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
     });
     const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(180, 160), floorMat);
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.position.set(0, -4.2, -35);
     scene.add(floorMesh);
+
+    function syncFloorOpacity() {
+      const alpha = Number(floorAlphaSelect.value);
+      floorMesh.visible = alpha > 0;
+      floorMat.opacity = alpha;
+      floorMat.transparent = alpha < 1;
+      floorMat.depthWrite = alpha === 1;
+      floorMat.needsUpdate = true;
+    }
+    syncFloorOpacity();
+
+    floorAlphaSelect.addEventListener('change', syncFloorOpacity);
 
     // Customizable backdrop plane sized dynamically to camera frustum and image aspect ratio
     const backdropMat = new THREE.MeshBasicMaterial({
@@ -796,7 +820,7 @@
       if (backdropMat.map) {
         backdropPlane.position.x = camera.position.x * 0.65;
         backdropPlane.position.y = 1.2 + (camera.position.y - 0.25) * 0.5;
-        backdropMat.opacity = smoothstep(4.5, 11.5, t) * 0.75;
+        backdropMat.opacity = smoothstep(4.5, 11.5, t) * 0.85;
       }
     }
 
