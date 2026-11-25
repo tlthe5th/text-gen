@@ -222,7 +222,7 @@
     const darkBg = new THREE.Color(0x030407);
     const dayBg = new THREE.Color(0xcbd5e1);
     scene.background = darkBg.clone();
-    scene.fog = new THREE.FogExp2(0x04060b, 0.012);
+    scene.fog = new THREE.FogExp2(0x04060b, 0.008);
 
     const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 0.1, 260);
     camera.position.set(0, 0.4, 19);
@@ -330,9 +330,9 @@
     const sunLight = new THREE.PointLight(0xffb703, 0, 26, 2.0);
     scene.add(sunLight);
 
-    // Semi-transparent matte 3D floor so backdrops show through while rubble still lands cleanly
-    const floorMat = new THREE.MeshLambertMaterial({
-      color: 0x0b0e14,
+    // Matte 3D floor with a clean slate-charcoal tone so 50% opacity stays readable over bright backdrops
+    const floorMat = new THREE.MeshBasicMaterial({
+      color: 0x1e2530,
       transparent: true,
       opacity: 0.5,
       depthWrite: false,
@@ -705,7 +705,7 @@
       }
       scene.background.copy(darkBg);
       scene.fog.color.setHex(0x04060b);
-      scene.fog.density = 0.012;
+      scene.fog.density = 0.008;
       ambientLight.intensity = 0.35;
       keyLight.intensity = 0.35;
       bloomPass.strength = 1.25;
@@ -812,10 +812,10 @@
       const daylight = smoothstep(8.5, 14.2, t);
       scene.background.copy(darkBg).lerp(dayBg, daylight);
       scene.fog.color.copy(darkBg).lerp(new THREE.Color(0xcbd5e1), daylight);
-      scene.fog.density = THREE.MathUtils.lerp(0.012, 0.011, daylight);
+      scene.fog.density = THREE.MathUtils.lerp(0.008, 0.006, daylight);
       ambientLight.intensity = THREE.MathUtils.lerp(0.35, 1.85, daylight);
       keyLight.intensity = THREE.MathUtils.lerp(1.35, 2.5, daylight);
-      floorMat.color.setHex(0x11151c).lerp(new THREE.Color(0x525c6a), daylight);
+      floorMat.color.setHex(0x1e2530).lerp(new THREE.Color(0x374151), daylight);
 
       if (backdropMat.map) {
         backdropPlane.position.x = camera.position.x * 0.65;
