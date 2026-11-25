@@ -222,7 +222,7 @@
     const darkBg = new THREE.Color(0x030407);
     const dayBg = new THREE.Color(0xcbd5e1);
     scene.background = darkBg.clone();
-    scene.fog = new THREE.FogExp2(0x04060b, 0.008);
+    scene.fog = new THREE.FogExp2(0x04060b, 0.006);
 
     const camera = new THREE.PerspectiveCamera(40, WIDTH / HEIGHT, 0.1, 260);
     camera.position.set(0, 0.4, 19);
@@ -330,16 +330,18 @@
     const sunLight = new THREE.PointLight(0xffb703, 0, 26, 2.0);
     scene.add(sunLight);
 
-    // Matte 3D floor with a clean slate-charcoal tone so 50% opacity stays readable over bright backdrops
+    // Positioned at y = -2.8 so 25% / 50% / Solid floor opacity is visibly distinct over backdrops
     const floorMat = new THREE.MeshBasicMaterial({
-      color: 0x1e2530,
+      color: 0x1e293b,
       transparent: true,
       opacity: 0.5,
       depthWrite: false,
+      fog: false,
     });
-    const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(180, 160), floorMat);
-    floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.position.set(0, -4.2, -35);
+    const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(180, 90), floorMat);
+    floorMesh.rotation.x = -Math.PI / 2.35;
+    floorMesh.position.set(0, -2.8, -14);
+    floorMesh.renderOrder = 1;
     scene.add(floorMesh);
 
     function syncFloorOpacity() {
@@ -364,6 +366,7 @@
     });
     const backdropPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), backdropMat);
     backdropPlane.position.set(0, 1.5, -45);
+    backdropPlane.renderOrder = 0;
     backdropPlane.visible = false;
     scene.add(backdropPlane);
 
@@ -572,6 +575,7 @@
           origin.y + (Math.random() - 0.5) * 1.3,
           origin.z + (Math.random() - 0.5) * 0.5
         );
+        m.renderOrder = 2;
         scene.add(m);
         debris.push({
           mesh: m,
@@ -640,6 +644,7 @@
 
         const isSun = idx === sunIdx;
         const mesh = new THREE.Mesh(geo, isSun ? sunMat : stoneMat);
+        mesh.renderOrder = 2;
         built.push({ idx, ch, width: w, mesh, isSun, isShatter: idx === shatterIdx });
         totalWidth += w + letterSpacing;
       });
@@ -705,7 +710,7 @@
       }
       scene.background.copy(darkBg);
       scene.fog.color.setHex(0x04060b);
-      scene.fog.density = 0.008;
+      scene.fog.density = 0.006;
       ambientLight.intensity = 0.35;
       keyLight.intensity = 0.35;
       bloomPass.strength = 1.25;
@@ -781,8 +786,8 @@
           d.mesh.rotation.x += d.rot.x * dt;
           d.mesh.rotation.y += d.rot.y * dt;
           d.mesh.rotation.z += d.rot.z * dt;
-          if (d.mesh.position.y < -4.1) {
-            d.mesh.position.y = -4.1;
+          if (d.mesh.position.y < -3.3) {
+            d.mesh.position.y = -3.3;
             d.vel.y *= -0.28;
             d.vel.x *= 0.75;
             d.vel.z *= 0.75;
@@ -812,10 +817,10 @@
       const daylight = smoothstep(8.5, 14.2, t);
       scene.background.copy(darkBg).lerp(dayBg, daylight);
       scene.fog.color.copy(darkBg).lerp(new THREE.Color(0xcbd5e1), daylight);
-      scene.fog.density = THREE.MathUtils.lerp(0.008, 0.006, daylight);
+      scene.fog.density = THREE.MathUtils.lerp(0.006, 0.005, daylight);
       ambientLight.intensity = THREE.MathUtils.lerp(0.35, 1.85, daylight);
       keyLight.intensity = THREE.MathUtils.lerp(1.35, 2.5, daylight);
-      floorMat.color.setHex(0x1e2530).lerp(new THREE.Color(0x374151), daylight);
+      floorMat.color.setHex(0x1e293b).lerp(new THREE.Color(0x334155), daylight);
 
       if (backdropMat.map) {
         backdropPlane.position.x = camera.position.x * 0.65;
