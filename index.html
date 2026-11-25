@@ -22,6 +22,10 @@
       justify-content: center;
       background: #000;
     }
+    #canvas-wrap.dragover {
+      outline: 3px dashed #f59e0b;
+      outline-offset: -12px;
+    }
     canvas {
       display: block;
       max-width: 100%;
@@ -56,7 +60,7 @@
       font-size: 13px;
     }
     input[type="text"] {
-      width: 180px;
+      width: 175px;
       font-weight: 600;
     }
     input[type="file"] {
@@ -151,6 +155,7 @@
         <option value="fit">Fit Full</option>
       </select>
     </label>
+    <button id="clearBackdropBtn" title="Remove custom backdrop">Clear BG</button>
     <button id="applyBtn">Generate</button>
     <button id="pauseBtn">Pause</button>
     <span id="timer">00.0s / 15.0s</span>
@@ -178,6 +183,7 @@
     const sunSelect = document.getElementById('sunSelect');
     const backdropInput = document.getElementById('backdropInput');
     const backdropFitSelect = document.getElementById('backdropFitSelect');
+    const clearBackdropBtn = document.getElementById('clearBackdropBtn');
     const applyBtn = document.getElementById('applyBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const recordBtn = document.getElementById('recordBtn');
@@ -324,7 +330,7 @@
     floorMesh.position.set(0, -4.2, -35);
     scene.add(floorMesh);
 
-    // Backdrop plane sized dynamically to camera frustum and image aspect ratio
+    // Customizable backdrop plane sized dynamically to camera frustum and image aspect ratio
     const backdropMat = new THREE.MeshBasicMaterial({
       map: null,
       transparent: true,
@@ -336,6 +342,15 @@
     backdropPlane.position.set(0, 1.5, -45);
     backdropPlane.visible = false;
     scene.add(backdropPlane);
+
+    function showStatus(msg, duration = 3000) {
+      statusEl.style.display = 'block';
+      statusEl.textContent = msg;
+      clearTimeout(showStatus._t);
+      showStatus._t = setTimeout(() => {
+        statusEl.style.display = 'none';
+      }, duration);
+    }
 
     function resizeBackdropToImage(tex) {
       if (!tex || !tex.image) return;
@@ -371,13 +386,31 @@
       backdropPlane.scale.set(planeW, planeH, 1);
     }
 
-    function applyBackdropTexture(tex) {
+    function applyBackdropTexture(tex, label = '') {
       tex.colorSpace = THREE.SRGBColorSpace;
       if (backdropMat.map) backdropMat.map.dispose();
       backdropMat.map = tex;
       backdropMat.needsUpdate = true;
       resizeBackdropToImage(tex);
       backdropPlane.visible = true;
+      if (label) showStatus(`Loaded backdrop: ${label}`);
+    }
+
+    function loadBackdropFile(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      const url = URL.createObjectURL(file);
+      texLoader.load(
+        url,
+        (tex) => {
+          applyBackdropTexture(tex, file.name);
+          URL.revokeObjectURL(url);
+        },
+        undefined,
+        () => {
+          URL.revokeObjectURL(url);
+          showStatus('Could not load image file.');
+        }
+      );
     }
 
     const texLoader = new THREE.TextureLoader();
@@ -390,21 +423,41 @@
 
     backdropInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      texLoader.load(url, (tex) => {
-        applyBackdropTexture(tex);
-        URL.revokeObjectURL(url);
-        statusEl.style.display = 'block';
-        statusEl.textContent = `Loaded backdrop: ${file.name}`;
-        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
-      });
+      if (file) loadBackdropFile(file);
+      e.target.value = '';
     });
 
     backdropFitSelect.addEventListener('change', () => {
       if (backdropMat.map) {
         resizeBackdropToImage(backdropMat.map);
       }
+    });
+
+    clearBackdropBtn.addEventListener('click', () => {
+      if (backdropMat.map) {
+        backdropMat.map.dispose();
+        backdropMat.map = null;
+      }
+      backdropMat.opacity = 0;
+      backdropMat.needsUpdate = true;
+      backdropPlane.visible = false;
+      showStatus('Backdrop cleared.');
+    });
+
+    wrap.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      wrap.classList.add('dragover');
+    });
+
+    wrap.addEventListener('dragleave', () => {
+      wrap.classList.remove('dragover');
+    });
+
+    wrap.addEventListener('drop', (e) => {
+      e.preventDefault();
+      wrap.classList.remove('dragover');
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) loadBackdropFile(file);
     });
 
     const raysGroup = new THREE.Group();
@@ -743,7 +796,7 @@
       if (backdropMat.map) {
         backdropPlane.position.x = camera.position.x * 0.65;
         backdropPlane.position.y = 1.2 + (camera.position.y - 0.25) * 0.5;
-        backdropPlane.opacity = smoothstep(4.5, 11.5, t) * 0.75;
+        backdropMat.opacity = smoothstep(4.5, 11.5, t) * 0.75;
       }
     }
 
@@ -770,8 +823,7 @@
 
     recordBtn.addEventListener('click', () => {
       if (!('MediaRecorder' in window)) {
-        statusEl.style.display = 'block';
-        statusEl.textContent = 'MediaRecorder is not supported in this browser.';
+        showStatus('MediaRecorder is not supported in this browser.', 4000);
         return;
       }
 
@@ -817,12 +869,10 @@
         hudEl.style.opacity = '1';
         recordBtn.disabled = false;
         applyBtn.disabled = false;
-        statusEl.textContent = `Downloaded ${slug}-15s.${ext}`;
-        setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+        showStatus(`Downloaded ${slug}-15s.${ext}`, 4000);
       };
 
-      statusEl.style.display = 'block';
-      statusEl.textContent = 'Recording 15.0s at 1920×1080... keep this tab visible.';
+      showStatus('Recording 15.0s at 1920×1080... keep this tab visible.', (DURATION + 1) * 1000);
       recorder.start();
 
       setTimeout(() => {
